@@ -82,7 +82,7 @@ def get_submission_epochs(result_files, benchmark, bert_train_samples):
 
 class RCP_Checker:
 
-    def __init__(self, usage, ruleset, verbose, bert_train_samples):
+    def __init__(self, usage, ruleset, verbose, bert_train_samples, rcp_dir=None):
         if ruleset != '1.0.0':
             raise Exception('RCP Checker only supported in 1.0.0')
         self.usage = usage
@@ -93,22 +93,33 @@ class RCP_Checker:
         self.rcp_data = {}
         self.bert_train_samples = bert_train_samples
         self.submission_runs = submission_runs[usage]
+        self.rcp_dir = rcp_dir
         
         for benchmark in self.submission_runs.keys():
             raw_rcp_data = self._consume_json_file(usage, ruleset, benchmark)
+            if raw_rcp_data is None:
+                continue
             processed_rcp_data = self._process_raw_rcp_data(raw_rcp_data)
             self.rcp_data.update(processed_rcp_data)
 
 
     def _consume_json_file(self, usage, ruleset, benchmark):
         '''Read json file'''
-        json_file = os.path.join(os.path.dirname(__file__),
-                                 f"{usage}_{ruleset}",
-                                 f"rcps_{benchmark}.json"
-        )
+        if self.rcp_dir is None:
+            base_dir = os.path.join(os.path.dirname(__file__),
+                                    f"{usage}_{ruleset}")
+        else:
+            base_dir = self.rcp_dir
+            
+        json_file = os.path.join(base_dir,
+                                 f"rcps_{benchmark}.json")
         #json_file = os.getcwd() + '/mlperf_logging/rcp_checker/' + ruleset + '/rcps_'+ benchmark+ '.json'
-        with open(json_file, 'r') as f:
-            return json.load(f)
+        try:
+            with open(json_file, 'r') as f:
+                return json.load(f)
+        except IOError:
+            print(f"Warning, no rcp file found for {benchmark}. Skipping all checks for this benchmark.")
+            return None
 
 
     def _process_raw_rcp_data(self, raw_rcp_data):
@@ -374,6 +385,8 @@ def get_parser():
                     help='what WG does the benchmark come from to check the log against')
     parser.add_argument('--rcp_version', type=str, default='1.0.0',
                     help='what version of rules to check the log against')
+    parser.add_argument('--rcp_directory', type=str, default=None,
+                    help='specify a non-default lookup path for rcp files')
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--bert_train_samples', action='store_true',
                     help='If set, num samples used for training '
@@ -383,8 +396,8 @@ def get_parser():
     return parser
 
 
-def make_checker(usage, ruleset, verbose=False, bert_train_samples=False):
-  return RCP_Checker(usage, ruleset, verbose, bert_train_samples)
+def make_checker(usage, ruleset, verbose=False, bert_train_samples=False, rcp_dir=None):
+  return RCP_Checker(usage, ruleset, verbose, bert_train_samples, rcp_dir=rcp_dir)
 
 
 def main(checker, dir):
